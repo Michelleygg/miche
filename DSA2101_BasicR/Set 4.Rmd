@@ -1,0 +1,74 @@
+---
+title: "DSA2101 Tutorial 4"
+author: "Michelle Yong Pei Feng A0221827H"
+date: "9/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r data, include = TRUE}
+library(jsonlite)
+library(sf)
+library(ggplot2)
+
+get_taxi_data <- function(x){
+  website <- "https://api.data.gov.sg/v1/transport/taxi-availability"
+  dt <- format(x, format = "%Y-%m-%dT%H:%M:%S")
+  data <- fromJSON(paste0(website, "?date_time=", dt))
+  class(data) <- "taxi_json"
+  return(data)
+}
+class(get_taxi_data) <- "taxi_json"
+
+dt1 <- as.POSIXct("2021-01-10 09:00:00")
+wet_day_locs <- get_taxi_data(dt1)
+str(wet_day_locs, max.levels=1)
+
+summary.taxi_json <- function(x){
+  ts <- x$features$properties$timestamp
+  tc <- x$features$properties$taxi_count
+  cat("Taxi count: ", tc, "\n")
+  cat("Actual timestamp:  ", ts)
+}
+
+summary(wet_day_locs)
+
+as.data.frame.taxi_json <- function(x) {
+  coordinates <- as.data.frame(x$features$geometry$coordinates)
+  collection <- st_as_sf(coordinates, coords=c(1,2))
+  st_crs(collection) <- 4326
+  collection <- st_transform(collection, 3414)
+  return(collection)
+}
+
+as.data.frame(wet_day_locs)
+```
+
+```{r, echo=FALSE}
+
+sg_planning_areas <- readRDS("C:/Users/admin/Dropbox/Michelle/GoodNotes 5/GoodNotes/DSA2101/data/sg_planning_areas.rds")
+
+#wet_day_locs graph
+par(fig=c(0,0.5,0,1))
+plot(st_geometry(sg_planning_areas), main="Wet Day", axes=TRUE)
+taxi_wet <- as.data.frame(wet_day_locs)
+plot(st_geometry(taxi_wet), pch="+", cex = 0.5, add=TRUE)
+
+#dry_day_locs graph
+par(fig=c(0.5,1,0,1), new =TRUE)
+taxi_dry <- as.data.frame(get_taxi_data(as.POSIXct("2021-01-17 09:00:00")))
+plot(st_geometry(sg_planning_areas), main="Dry Day", axes=TRUE)
+plot(st_geometry(taxi_dry), pch="+", cex = 0.5, add=TRUE)
+
+par(fig=c(0,1,0,1))
+wet_count <- unlist(lapply(st_contains(sg_planning_areas, taxi_wet), length))
+dry_count <- unlist(lapply(st_contains(sg_planning_areas, taxi_dry), length))
+point_lab <- sg_planning_areas$PLN_AREA_C
+grey <- rgb(0, 0, 0, alpha=0.3)
+plot(wet_count, dry_count, axes=TRUE, ylab="Dry Count", xlab="Wet Count", main="Dry vs. Wet Day", pch = 16, col = grey)
+abline(b=1, a=0, lty=2, col = "red")
+text(dry_count ~ wet_count, labels=point_lab, cex=0.6, pos=1)
+```

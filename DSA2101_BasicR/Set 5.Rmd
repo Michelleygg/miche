@@ -1,0 +1,119 @@
+---
+title: "DSA2101 Tutorial 5"
+author: "Michelle Yong Pei Feng A0221827H"
+date: "10/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Hmisc)
+library(readxl)
+library(wordcloud)
+library(tm)
+```
+
+```{r data, include = TRUE}
+artist_info <- read.csv("../DSA2101/artist_data.csv") %>% as_tibble()
+artist_work <- read.csv("../DSA2101/artwork_data.csv") %>% as_tibble()
+
+#Convert to numeric
+artist_work$year <- as.numeric(artist_work$year)
+
+# Warning message:
+# NAs introduced by coercion
+# Some year data was missing, missing values replaced by NA.
+
+#Place of Birth
+artists_nation <- read_xlsx("../DSA2101/artists_nation.xlsx")
+
+x <- artist_info %>% 
+  filter(placeOfBirth != "") %>%
+  separate(placeOfBirth, c("city", "birth_area"), ", ", extra="merge") %>%
+  left_join(artists_nation, by="birth_area") %>%
+  select(ï..id, nation)
+
+artist_info <- artist_info %>% left_join(x, by="ï..id")
+
+#No information
+no_info <- anti_join(artist_work, artist_info, by=c("artist"="name")) %>%
+  select(artist, artistId) %>%
+  unique()
+no_info
+
+#Remove an Artist Outlier
+most_work <- artist_work %>% group_by(artist) %>%
+  count() %>%
+  arrange(desc(n)) %>% ungroup() %>%
+  slice(1)
+most_work
+artist_work <- anti_join(artist_work, most_work, by="artist")
+
+#Gender counts By Century
+work2 <- mutate(artist_work, century=paste0(acquisitionYear %/% 100, "th C."))
+genderByCentury <- left_join(work2, artist_info, by=c("artist"="name")) %>%
+  filter(century!="NAth C.") %>%
+  filter(gender=="Male" | gender=="Female") %>%
+  group_by(century, gender) %>% 
+  count() %>%
+  pivot_wider(id_cols=gender, names_from=century, values_from=n)
+genderByCentury
+
+#Popularity of Medium
+#1
+tokens <- str_split(artist_work$medium, boundary("word")) %>%
+  unlist() %>% str_to_lower()
+#2
+tokens_no_stop <- removeWords(tokens,
+                              c(stopwords(), "paper", "canvas")) %>%
+  Filter(function(x) nchar(x) >0, .)
+#3
+tmp_table <- table(tokens_no_stop)
+ww <- names(tmp_table)
+vv <- as.numeric(tmp_table)
+set.seed(2101)
+wordcloud(ww, vv, scale=c(1.5,.3), min.freq = 30)
+```
+
+1. Sentences in each row of the medium column are broken down into individual
+   words by str_split() and converted to lower caps by str_to_lower().
+2. removeWords() from the 'tm' library converts filler words like "on", "and" 
+   to "". "paper" and "canvas" were also converted as they appear too 
+   frequently and are not meaningful. "" are removed with the filter function.
+3. Names and frequencies of the different mediums are assigned to ww and vv. 
+   wordcloud() presents that the top mediums used are "paint", "graphite"
+   and "watercolour".
+
+
+```{r, include = TRUE}
+#Versatile artists
+versatile_artist <- artist_work %>%
+  group_by(artist) %>%
+  filter(n()>9) %>%
+  filter(n_distinct(medium)==n()) %>%
+  ungroup() %>%
+  select(artist, medium, year)
+versatile_artist
+
+#Popular artists
+popular_artists <- artist_work %>% 
+  mutate(difference = acquisitionYear-year) %>%
+  group_by(artistId) %>%
+  filter(n()>9, min(year)>1969) %>%
+  summarise(median_yrs = median(difference), .groups="drop") %>%
+  filter(median_yrs<=1) %>%
+  select(artistId, median_yrs)
+popular_artists
+```
+
+To Explore\
+From the github link, art works acquired by Tate were grouped according to 
+world continents. The data shows that most of the work were from Europe.
+(Tate Collection Geolocalized by Corentin Cournac, Mathieu Dauré, William 
+Duclot and Pierre Présent.) 
+It would be interesting to group the acquired art works by countries within
+Europe itself and study the data against the placeOfBirth/placeOfDeath of the 
+artists.
+
+

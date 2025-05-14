@@ -1,0 +1,306 @@
+---
+title: "DSA2101 Tutorial 7"
+runningheader: "Raking and clustering implementation" # only for pdf output
+subtitle: "Raking and clustering implementation" # only for html output
+author: "Michelle Yong Pei Feng (A0221827H)"
+date: "15 November 2021"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+bibliography: skeleton.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+library(tufte)
+# invalidate cache when the tufte version changes
+knitr::opts_chunk$set(cache.extra = packageVersion('tufte'))
+options(htmltools.dir.version = FALSE)
+library(readxl)
+library(tidyverse)
+library(survey)
+library(cluster)
+library(gridExtra)
+library(factoextra)
+```
+
+## Survey Background 
+
+The Questionnaire
+1. I don’t feel particularly pleased with the way I am. (R)   
+2. I am intensely interested in other people.   
+3. I feel that life is very rewarding.   
+4. I have very warm feelings towards almost everyone.   
+5. I rarely wake up feeling rested. (R)   
+6. I am not particularly optimistic about the future. (R)   
+7. I find most things amusing.   
+8. I am always committed and involved.   
+9. Life is good.   
+10. I do not think that the world is a good place. (R) _  
+11. I laugh a lot.   
+12. I am well satisfied about everything in my life.   
+13. I don’t think I look attractive. (R)   
+14. There is a gap between what I would like to do and what I have done. (R)   
+15. I am very happy.   
+16. I find beauty in some things.   
+17. I always have a cheerful effect on others.   
+18. I can fit in (find time for) everything I want to.   
+19. I feel that I am not especially in control of my life. (R)   
+20. I feel able to take anything on.   
+21. I feel fully mentally alert.   
+22. I often experience joy and elation.   
+23. I don’t find it easy to make decisions. (R)   
+24. I don’t have a particular sense of meaning and purpose in my life. (R)   
+25. I feel I have a great deal of energy.   
+26. I usually have a good influence on events.   
+27. I don’t have fun with other people. (R)   
+28. I don’t feel particularly healthy. (R)   
+29. I don’t have particularly happy memories of the past. (R)
+
+Happiness score = Sum of scores divided by 29.
+
+## Data Manipulation
+
+For formatting, column names of question responses have been converted to abbreviations,
+such as "I don’t feel particularly pleased with the way I am." to "Q1" and 
+"I am intensely interested in other people." to "Q2" etc. for all 29 survey
+questions. Items marked (R) with scores reversed are also corrected for the happiness
+count.
+
+```{r data1, cache=TRUE, warning=FALSE}
+#Data manipulation
+happy <- read_excel("../data/happ_svy_data.xlsx") %>%
+  as_tibble()
+names <- paste0("Q",1:29)
+colnames(happy) <- c(names, "citizenship", "residential","gender")
+
+#Adding happiness count for each row
+reverse <- c(1,5,6,10,13,14,19,23,24,27,28,29)
+order <- c(1:29) %>%
+  setdiff(reverse)
+happy <- happy %>%
+  mutate_at(order, funs(recode(.,`Strongly disagree`=1, `Moderately disagree`=2,   
+                                `Slightly disagree`=3, `Slightly agree`=4, 
+                                `Moderately agree`=5, `Strongly agree`=6))) %>%
+  mutate_at(reverse, funs(recode(.,`Strongly disagree`=6, `Moderately disagree`=5,   
+                               `Slightly disagree`=4, `Slightly agree`=3, 
+                               `Moderately agree`=2, `Strongly agree`=1))) %>%
+  mutate(happiness=rowSums(across(Q1:Q29))/29)
+
+happy
+```
+
+## Removing Outlier
+
+```{r fig1, fig.margin=TRUE, fig.cap = "Happiness boxplot with outlier", cache=TRUE}
+ggplot(happy) +
+  geom_boxplot(aes(citizenship, happiness)) +
+  geom_boxplot(aes(gender, happiness)) +
+  geom_boxplot(aes(residential, happiness)) +
+  scale_x_discrete(limits=c("M","F","Foreigner","Singaporean/PR","On campus","Off campus")) +
+  geom_vline(xintercept = c(2.5,4.5), linetype="dashed", size=0.6) +
+  labs(x="Demogrpahic", y="Happiness Count", 
+       title="Happiness boxplot for each demographic group before raking")
+```
+
+The outlier as seen from the boxplot belongs to the demographic: Female, foreigner and off-campus.
+Since the observed value deviates from the majority drastically, the outlier is removed 
+for better data analysis.
+
+```{r fig2, fig.cap = "Happiness boxplot without outlier", cache=TRUE}
+#Removing outlier
+outlier <- happy %>% 
+  filter(happiness<2)
+outlier
+happy <- happy %>%
+  filter(happiness>2)
+
+ggplot(happy) +
+  geom_boxplot(aes(citizenship, happiness)) +
+  geom_boxplot(aes(gender, happiness)) +
+  geom_boxplot(aes(residential, happiness)) +
+  scale_x_discrete(limits=c("M","F","Foreigner","Singaporean/PR","On campus","Off campus")) +
+  geom_vline(xintercept = c(2.5,4.5), linetype="dashed", size=0.6) +
+  labs(x="Demogrpahic", y="Happiness Count", 
+       title="Happiness boxplot for each demographic group before raking")
+```
+
+The final box plot shows that generally, females, foreigners, and students on campus 
+have higher happiness scores than their counterparts. A possible prediction may be that 
+most foreign students are staying on campus and consists of more females than males.
+
+## Raking: Correction for Non-response
+
+There are 44 males and 28 females in the sample population, while there are
+65 males and 40 females in the entire population. Hence, weighing the 
+responses with raking by gender corrects for non-response in the survey data.
+
+```{r data2(i), cache=TRUE, warning=FALSE}
+#Creating survey object
+happy$ID <- seq.int(nrow(happy))
+happy$fpc <- 105
+happy_data <- happy %>%
+  svydesign(id=~ID, data=., fpc=~fpc)
+
+#Before raking
+svymean(~happiness, design=happy_data)
+confint(svymean(~happiness, design=happy_data))
+```
+
+```{r data2(ii), cache=TRUE, warning=FALSE}
+#Raking by gender
+happy_pop <- data.frame(gender=c("M","F"),Freq=c(65,40))
+
+happy_data.raked <- rake(happy_data, sample=list(~gender),
+                         population=list(happy_pop))
+#After raking
+svymean(~happiness, design=happy_data.raked)
+confint(svymean(~happiness, design=happy_data.raked))
+```
+
+After raking, the happiness mean decreased from 3.6825 to 3.6806, with a smaller 
+standard deviation from 0.0392 to 0.0384. The confidence interval of the raked 
+data also narrowed. 
+
+
+## Ward's Clustering
+
+To analyse the correlation between each individual question scores, Ward's 
+hierarchical clustering is utilized to group questions will higher correlation into
+the same cluster.
+
+```{r data3, cache=TRUE, warning=FALSE}
+happy_questions <- happy %>%
+  group_by(Q1)
+
+cor_happy <- happy %>%
+  select(Q1:Q29) %>%
+  select(.,which(!sapply(., is.factor))) %>%
+  cor(., use="pair")
+
+cor_happy_df <- as.data.frame(cor_happy,row.names=NULL) %>%
+  mutate(var1=row.names(cor_happy)) %>%
+  pivot_longer(Q1:Q29, names_to ="var2",values_to ="correlation")
+
+hc <- hclust(as.dist((1-cor_happy)/2), method="ward.D")
+ord <- order.dendrogram(as.dendrogram(hc))
+cor_happy_df2 <- mutate(cor_happy_df,
+                          var1=factor(var1,levels=row.names(cor_happy)[ord]),
+                          var2=factor(var2,levels=row.names(cor_happy)[ord]))
+```
+
+```{r fig3, fig.cap = "Happiness Dendrogram with Ward's Clustering", cache=TRUE}
+plot(as.dendrogram(hc))
+
+ggplot(cor_happy_df2) +
+  geom_tile(aes(x=var1,y=var2,fill=correlation)) +
+  scale_fill_gradient(low="white", high="darkblue") +
+  theme(axis.text = element_text(size=6)) +
+  labs(x="Response 1", y="Response 2", title="Correlation Heat Map for the 29 Survey Questions")
+```
+
+From the correlation heatmap, there is strong association between questions within the cluster
+containing Q12, Q22, Q9 and Q15. These questions belongs to the questions: 
+
+Q12:  "I am well satisfied about everything in my life."
+Q22:  "I often experience joy and elation."
+Q9:  "Life is good."
+Q15:  "I am very happy."
+
+The questions derived similar results given a person's happiness level, hence they 
+have similar scores and higher correlation as compared to other questions. For example, 
+a happy person is more likely score well for all 4 questions, but an unhappy question 
+will score poorly. 
+
+Alternatively, Q2 and Q25 have lower correlation with all other questions. These 
+questions are:
+
+Q2:  "I am intensely interested in other people."
+Q25:  "I feel I have a great deal of energy."
+
+These two questions have poor correlation will all other questions, hence their scores 
+are not associated to the other questions. A possible reason maybe that Q2 and Q25 have
+poor relation to one's happiness, resulting in varying responses.
+
+## Kmeans Clustering
+
+Kmeans clustering can be used to study questions which are more likely to score well
+or poorly together, as well as the effect of the cluster on the overall happiness count.
+
+```{r fig4, fig.cap = "Happiness Kmeans Clustering with Different K Values", cache=TRUE}
+happy1 <- happy %>%
+  select(Q1:Q29, happiness, ID)
+
+k2 <- kmeans(happy1, centers = 2, nstart = 25)
+k3 <- kmeans(happy1, centers = 3, nstart = 25)
+k4 <- kmeans(happy1, centers = 4, nstart = 25)
+k5 <- kmeans(happy1, centers = 5, nstart = 25)
+
+p1 <- fviz_cluster(k2, geom = "point", data = happy1) + ggtitle("k = 2")
+p2 <- fviz_cluster(k3, geom = "point",  data = happy1) + ggtitle("k = 3")
+p3 <- fviz_cluster(k4, geom = "point",  data = happy1) + ggtitle("k = 4")
+p4 <- fviz_cluster(k5, geom = "point",  data = happy1) + ggtitle("k = 5")
+
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+```
+
+The representation shows the distribution of points for each k value. To find the 
+optimal k value, we can find the k value with the minimum cluster gap.
+
+```{r fig5, fig.margin=TRUE, fig.cap = "Optimal K Value", cache=TRUE}
+set.seed(123)
+gap_stat <- clusGap(happy1, FUN = kmeans, nstart = 25,
+                    K.max = 10, B = 50)
+fviz_gap_stat(gap_stat)
+```
+
+From the margin figure, the optimal k value is 8 as the cluster gap is minimal. By
+using the optimal 8 value, we can group the survey questions and study their impact 
+on a student's happiness count.
+
+```{r fig6, fig.cap = "Kmeans Clustering at Optimal K value", cache=TRUE}
+final <- kmeans(happy1, 8, nstart = 25)
+fviz_cluster(final, geom = "point",  data = happy1) + ggtitle("k = 8")
+```
+
+```{r data4, cache=TRUE, warning=FALSE}
+happy_kmeans <- happy1 %>%
+  mutate(cluster=final$cluster) %>%
+  group_by(cluster) %>%
+  summarise_all("mean") %>%
+  pivot_longer(cols=c(Q1:Q29, happiness),
+               names_to="value", values_to="mean") %>%
+  mutate(h=ifelse(value=="happiness", 1, 0))
+```
+
+```{r fig7, fig.cap = "Kmeans Clustering, k=8", cache=TRUE}
+ggplot(happy_kmeans, aes(reorder(value,-mean), mean, group=cluster)) +
+  geom_point(aes(color=h)) +
+  facet_wrap(~ cluster) +
+  theme_bw() +
+  
+  theme(axis.text.x=element_text(angle=70, hjust=1, size=5),
+        legend.position="none") +
+  labs(x="Survey Catagories", y="Mean Value", 
+       title="Mean Values For Each Survey Catagory Within Each Cluster")
+```
+
+Each graph belongs to each cluster of survey questions and their mean values are tabulated. 
+The graphs show the general relationship between the questions and the overall 
+happiness score. 
+
+The representation shows the variation of mean scores and the proportion of points 
+above and below the happiness count for each cluster. For example, cluster 2 has 
+all points above score 3, excluding Q25 having 2. Therefore, we can predict that for a student 
+who scores well for most questions, he/she is more likely to get a 
+score of 2 for Q25 and a happiness count of approximately 4.7. 
+The clusters help group students will similar responses and estimate 
+their happiness score. 
+
+
+
