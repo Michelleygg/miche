@@ -1,0 +1,11 @@
+version: '3'
+services:
+  flask:
+    build: .
+    ports:
+      - "1000:5000"
+    restart: always
+  mysql:
+    image: "swamyhn/mysqldb:latest"
+    ports:
+      - "5432:3306"

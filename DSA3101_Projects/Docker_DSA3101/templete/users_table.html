@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Users</title>
+</head>
+<body>
+    
+    {% block content %}
+    <h1>These are the users who have registered currently:</h1>
+    {{users | safe}}
+    {% endblock %}
+
+    <p><a href = "{{ url }}">Click here to register a new user</a></p>
+</body>
+</html>

@@ -1,0 +1,21 @@
+version: "1"
+services:
+  web:
+    build: .
+    links:
+      - db
+    ports:
+      - "5000:5000"
+  db:
+    image: mysql:5.7
+    command: mysqld --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: mydb
+    ports:
+      - "3306:3306"
+
+
