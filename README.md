@@ -18,7 +18,7 @@ Libraries:
 - R: ggplot2, dplyr, tidyr
 
 ## 📌 Highlights
-Data Cleaning & Preprocessing: Implemented robust data cleaning pipelines to handle missing values and outliers.
-Exploratory Data Analysis (EDA): Conducted in-depth EDA to uncover insights and inform modeling decisions.
-Machine Learning Models: Developed and evaluated models for classification and regression tasks.
-Data Visualization: Created informative visualizations to communicate findings effectively.
+- Data Cleaning & Preprocessing: Implemented robust data cleaning pipelines to handle missing values and outliers.
+- Exploratory Data Analysis (EDA): Conducted in-depth EDA to uncover insights and inform modeling decisions.
+- Machine Learning Models: Developed and evaluated models for classification and regression tasks.
+- Data Visualization: Created informative visualizations to communicate findings effectively.
