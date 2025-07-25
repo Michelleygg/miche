@@ -1,8 +1,0 @@
-streamlit
-plotly
-pandas
-folium
-pyproj
-streamlit_folium
-requests
-openpyxl
