@@ -1,5 +1,5 @@
 #Install packages
-pip install streamlit plotly pandas folium streamlit_folium openpyxl
+#pip install streamlit plotly pandas folium streamlit_folium openpyxl
 
 import pandas as pd
 import streamlit as st
