@@ -10,7 +10,7 @@ from pyproj import Transformer
 from streamlit_folium import st_folium
 
 #Load data
-df = pd.read_excel('Bird Nuisance (2025)(Updated).xlsx')
+df = pd.read_excel('data/Bird Nuisance (2025)(Updated).xlsx')
 
 #Remove na rows and format datetime
 df = df.dropna()
